@@ -100,6 +100,18 @@ module Grape
           !@conditions.empty?
         end
 
+        # Whether the output key is computed at runtime (e.g. `as: proc`)
+        # and therefore cannot be determined statically.
+        def dynamic_key?
+          @key.respond_to?(:call)
+        end
+
+        # Whether nil values are exposed for this exposure. When false, the
+        # key is omitted from the output whenever the value is nil.
+        def expose_nil?
+          @options[:expose_nil] != false
+        end
+
         def conditions_met?(entity, options)
           @conditions.all? { |condition| condition.met? entity, options }
         end

@@ -290,6 +290,34 @@ module Grape
       end
     end
 
+    # Returns a JSON Schema (draft 2020-12) describing the representations
+    # produced by this entity, built statically from the declared exposures.
+    #
+    # Unlike .documentation, which only collects the per-field
+    # `:documentation` hashes, this describes the actual output structure:
+    # output aliases become properties, `:using` entities are referenced
+    # through `$defs`/`$ref` (recursive entities terminate), conditional
+    # fields are marked optional with an `x-conditional` annotation, and
+    # anything that cannot be inferred statically (merged hashes, dynamic
+    # keys, undeclared formatter result types) is reported under
+    # `x-undetermined-fields` instead of being guessed.
+    #
+    # @param only [Array, nil] fields to include, same shape as the runtime
+    #   `:only` option (nested hashes allowed)
+    # @param except [Array, nil] fields to exclude, same shape as the runtime
+    #   `:except` option
+    # @param collection [Boolean] describe a collection representation
+    # @param root [String, Symbol, nil, false] override the root element name,
+    #   mirroring the `:root` option of .represent
+    # @return [Hash] the JSON Schema
+    #
+    # @example
+    #   API::Entities::User.json_schema(collection: true)
+    #   API::Entities::User.json_schema(only: [:id, { status: [:id] }])
+    def self.json_schema(only: nil, except: nil, collection: false, root: JsonSchema::UNDEFINED)
+      JsonSchema.export(self, only: only, except: except, collection: collection, root: root)
+    end
+
     # This allows you to declare a Proc in which exposures can be formatted with.
     # It takes a block with a single argument which is passed as the value of the exposed attribute.
     #
