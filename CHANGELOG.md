@@ -7,6 +7,7 @@
 #### Features
 
 * Your contribution here.
+* Add `:since` / `:until` version-ranged exposures with a target `version` option for `represent` and `documentation`.
 
 
 ### 1.1.0 (2026-06-05)

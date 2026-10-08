@@ -24,6 +24,7 @@ module Grape
 
         def value(entity, options)
           new_options = options.for_nesting(key(entity))
+          new_options = new_options.merge(version: mapped_version(options)) if @options[:version]
           using_class.represent(@subexposure.value(entity, options), new_options)
         end
 
@@ -40,6 +41,20 @@ module Grape
         end
 
         private
+
+        # Explicit :version mapping for the nested entity. A static value pins
+        # the nested representation to that version; a Hash maps the inherited
+        # version to the nested entity's own version, falling back to the
+        # inherited version when no entry matches.
+        def mapped_version(options)
+          mapping = @options[:version]
+          return mapping unless mapping.is_a?(Hash)
+
+          current = options[:version]
+          return if current.nil?
+
+          mapping.fetch(VersionRange.coerce(current).to_s, current)
+        end
 
         def using_options_for(options)
           options.for_nesting(key)

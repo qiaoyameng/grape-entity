@@ -189,6 +189,11 @@ module Grape
     # @option options :documentation Define documenation for an exposed
     #   field, typically the value is a hash with two fields, type and desc.
     # @option options :merge This option allows you to merge an exposed field to the root
+    # @option options :since First version (inclusive) for which the field is exposed.
+    #   Versions are compared with Gem::Version semantics, never as strings.
+    # @option options :until Last version (exclusive) for which the field is exposed.
+    # @option options :version On a +using+ exposure, pins or maps the version
+    #   inherited by the nested entity.
     #
     # rubocop:disable Layout/LineLength
     def self.expose(*args, &block)
@@ -284,10 +289,11 @@ module Grape
     # Returns a hash, the keys are symbolized references to fields in the entity,
     # the values are document keys in the entity's documentation key. When calling
     # #docmentation, any exposure without a documentation key will be ignored.
-    def self.documentation
-      @documentation ||= root_exposures.each_with_object({}) do |exposure, memo|
-        memo[exposure.key] = exposure.documentation if exposure.documentation && !exposure.documentation.empty?
-      end
+    # Accepts an optional target version; only exposures available for that
+    # version are included. Results are memoized per version, so querying one
+    # version never pollutes the cache of another.
+    def self.documentation(version = nil)
+      (@documentation ||= {})[VersionRange.coerce(version)&.to_s] ||= root_exposures.documentation(version)
     end
 
     # This allows you to declare a Proc in which exposures can be formatted with.
@@ -500,7 +506,7 @@ module Grape
     end
 
     def documentation
-      self.class.documentation
+      self.class.documentation(options[:version])
     end
 
     def formatters
@@ -646,6 +652,9 @@ module Grape
       expose_nil
       override
       default
+      since
+      until
+      version
     ].to_set.freeze
 
     # Merges the given options with current block options.

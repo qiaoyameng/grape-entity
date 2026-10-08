@@ -7,7 +7,7 @@ module Grape
   class Entity
     module Exposure
       class Base
-        attr_reader :attribute, :is_safe, :documentation, :override, :conditions, :for_merge
+        attr_reader :attribute, :is_safe, :documentation, :override, :conditions, :for_merge, :version_range
 
         def self.new(attribute, options, conditions, ...)
           super(attribute, options, conditions).tap { |e| e.setup(...) }
@@ -25,6 +25,7 @@ module Grape
           @documentation = options[:documentation]
           @override = options[:override]
           @conditions = conditions
+          @version_range = VersionRange.build(options)
         end
 
         def dup(&block)
@@ -105,7 +106,23 @@ module Grape
         end
 
         def should_expose?(entity, options)
-          should_return_key?(options) && conditions_met?(entity, options)
+          version_matches?(options) && should_return_key?(options) && conditions_met?(entity, options)
+        end
+
+        # Version filtering runs before conditions, attribute getters and
+        # formatters, so fields excluded for the target version do not
+        # execute any business code.
+        def version_matches?(options)
+          version_in_range?(options[:version])
+        end
+
+        def version_in_range?(version)
+          @version_range.nil? || @version_range.include?(version)
+        end
+
+        # The output key when statically known; nil for dynamic (proc) keys.
+        def static_key
+          @key.respond_to?(:call) ? nil : @key
         end
 
         def attr_path(entity, options)

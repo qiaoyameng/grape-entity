@@ -13,6 +13,7 @@
       - [Basic Exposure](#basic-exposure)
       - [Exposing with a Presenter](#exposing-with-a-presenter)
       - [Conditional Exposure](#conditional-exposure)
+      - [Versioned Exposure](#versioned-exposure)
       - [Safe Exposure](#safe-exposure)
       - [Nested Exposure](#nested-exposure)
       - [Collection Exposure](#collection-exposure)
@@ -152,6 +153,43 @@ expose :ip, if: :type # exposed if :type is available in the options hash
 expose :ip, if: { type: :full } # exposed if options :type has a value of :full
 
 expose :ip, unless: ... # the opposite of :if
+```
+
+#### Versioned Exposure
+
+Use `:since` and `:until` to expose a field only for a range of API versions, and pass the target version when representing. This lets one entity serve both v1 and v2 clients:
+
+```ruby
+class User < Grape::Entity
+  expose :id
+  expose :legacy_name, as: :name, until: '2.0' # exposed for versions below 2.0
+  expose :name, since: '2.0'                   # exposed for 2.0 and above
+end
+
+User.represent(user, version: '1.9') # => { id: 1, name: 'old name' }
+User.represent(user, version: '2.0') # => { id: 1, name: 'new name' }
+```
+
+Versions are compared with `Gem::Version` semantics, never as strings, so `2.10` sorts after `2.9`. The `:since` boundary is inclusive and the `:until` boundary is exclusive. When no version is given, no version filtering is applied.
+
+Version filtering runs before conditions, attribute getters and formatters, so fields excluded for the target version never execute any business code.
+
+The same output path may be declared again (also in a subclass) as long as the version ranges do not overlap; overlapping ranges or versions that cannot be compared raise an `ArgumentError` when the exposure is declared. `override: true` keeps its usual meaning and replaces previous declarations of the same attribute.
+
+Nested entities inherit the target version. Use `:version` on a `using:` exposure to pin the nested entity to an explicit version, or pass a hash to map the inherited version to the nested entity's own version:
+
+```ruby
+class User < Grape::Entity
+  expose :status, using: Status::Entity                            # inherits the version
+  expose :profile, using: Profile::Entity, version: '1.0'          # always rendered as 1.0
+  expose :account, using: Account::Entity, version: { '2.0' => '1.5' } # version mapping
+end
+```
+
+`Entity.documentation` accepts an optional version and returns only the fields available for it; results are cached per version:
+
+```ruby
+User.documentation('2.0')
 ```
 
 #### Safe Exposure
