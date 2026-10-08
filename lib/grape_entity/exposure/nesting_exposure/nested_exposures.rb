@@ -31,6 +31,12 @@ module Grape
             @exposures
           end
 
+          def delete_by_path(attribute, key)
+            reset_memoization!
+            @exposures.reject! { |exposure| exposure.attribute == attribute || (key && exposure.static_key == key) }
+            @exposures
+          end
+
           def clear
             reset_memoization!
             @exposures.clear
@@ -59,19 +65,22 @@ module Grape
           # rubocop:enable Style/DocumentDynamicEvalDefinition
 
           # Determine if we have any nesting exposures with the same name.
-          def deep_complex_nesting?(entity)
-            if @deep_complex_nesting.nil?
-              all_nesting = select(&:nesting?)
-              @deep_complex_nesting =
-                all_nesting
-                .group_by { |exposure| exposure.key(entity) }
-                .any? { |_key, exposures| exposures.length > 1 }
+          def deep_complex_nesting?(entity, options = nil)
+            if options.nil?
+              @deep_complex_nesting ||= grouping_is_complex?(select(&:nesting?), entity)
             else
-              @deep_complex_nesting
+              all_nesting = select(&:nesting?).select { |exposure| exposure.valid_for_version?(options) }
+              grouping_is_complex?(all_nesting, entity)
             end
           end
 
           private
+
+          def grouping_is_complex?(exposures, entity)
+            exposures
+              .group_by { |exposure| exposure.key(entity) }
+              .any? { |_key, grouped_exposures| grouped_exposures.length > 1 }
+          end
 
           def reset_memoization!
             @deep_complex_nesting = nil

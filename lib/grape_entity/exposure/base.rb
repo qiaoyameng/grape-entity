@@ -7,7 +7,7 @@ module Grape
   class Entity
     module Exposure
       class Base
-        attr_reader :attribute, :is_safe, :documentation, :override, :conditions, :for_merge
+        attr_reader :attribute, :is_safe, :documentation, :override, :conditions, :for_merge, :version_range
 
         def self.new(attribute, options, conditions, ...)
           super(attribute, options, conditions).tap { |e| e.setup(...) }
@@ -25,6 +25,7 @@ module Grape
           @documentation = options[:documentation]
           @override = options[:override]
           @conditions = conditions
+          @version_range = VersionRange.new(since: options[:since], until_version: options[:until])
         end
 
         def dup(&block)
@@ -53,7 +54,7 @@ module Grape
           false
         end
 
-        def valid?(entity)
+        def valid?(entity, _options = nil)
           is_delegatable = entity.delegator.delegatable?(@attribute) || entity.respond_to?(@attribute, true)
           if @is_safe
             is_delegatable
@@ -96,6 +97,10 @@ module Grape
           options.should_return_key?(@key)
         end
 
+        def valid_for_version?(options)
+          version_range.covers?(options[:version])
+        end
+
         def conditional?
           !@conditions.empty?
         end
@@ -105,7 +110,7 @@ module Grape
         end
 
         def should_expose?(entity, options)
-          should_return_key?(options) && conditions_met?(entity, options)
+          valid_for_version?(options) && should_return_key?(options) && conditions_met?(entity, options)
         end
 
         def attr_path(entity, options)
@@ -118,6 +123,10 @@ module Grape
 
         def key(entity = nil)
           @key.respond_to?(:call) ? entity.exec_with_object(@options, &@key) : @key
+        end
+
+        def static_key
+          @key unless @key.respond_to?(:call)
         end
 
         def with_attr_path(entity, options, &block)

@@ -25,6 +25,7 @@
       - [Format Before Exposing](#format-before-exposing)
       - [Expose Nil](#expose-nil)
       - [Default Value](#default-value)
+      - [Version Ranges](#version-ranges)
       - [Documentation](#documentation)
     - [Options Hash](#options-hash)
       - [Passing Additional Option To Nested Exposure](#passing-additional-option-to-nested-exposure)
@@ -509,6 +510,30 @@ module  Entities
     expose :age, default: 60
   end
 end
+```
+
+#### Version Ranges
+
+The same entity can serve multiple API versions by declaring `since` and `until`. The lower boundary is included and the upper boundary is excluded. Versions are compared numerically, so `2.10` is greater than `2.9`.
+
+```ruby
+class UserEntity < Grape::Entity
+  expose :name, until: '2'
+  expose :display_name, since: '2'
+end
+
+UserEntity.represent(user, version: '1')
+UserEntity.represent(user, version: '2')
+UserEntity.documentation(version: '2')
+```
+
+Version filtering runs before getters, conditions, blocks, and formatters, so fields outside the requested version do not execute their business logic. Declarations on the same output path must use non-overlapping ranges. Inherited declarations that should replace the parent declaration must still use `override: true`.
+
+Nested entities inherit the parent version. Use `version_mapping` when a nested entity uses different version numbers:
+
+```ruby
+expose :account, using: AccountEntity, version_mapping: { '2' => '1' }
+expose :profile, using: ProfileEntity, version_mapping: ->(version) { Grape::Entity::Version.cast(version).segments.first - 1 }
 ```
 
 #### Documentation

@@ -18,7 +18,7 @@ module Grape
           super && @block == other.block
         end
 
-        def valid?(_entity)
+        def valid?(_entity, _options = nil)
           true
         end
 

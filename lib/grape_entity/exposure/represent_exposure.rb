@@ -24,11 +24,12 @@ module Grape
 
         def value(entity, options)
           new_options = options.for_nesting(key(entity))
+          new_options = apply_version_mapping(new_options, options[:version])
           using_class.represent(@subexposure.value(entity, options), new_options)
         end
 
-        def valid?(entity)
-          @subexposure.valid? entity
+        def valid?(entity, _options = nil)
+          @subexposure.valid?(entity)
         end
 
         def using_class
@@ -43,6 +44,31 @@ module Grape
 
         def using_options_for(options)
           options.for_nesting(key)
+        end
+
+        def apply_version_mapping(options, current_version)
+          mapping = self.options[:version_mapping] || self.options[:version]
+          return options if mapping.nil?
+
+          mapped_version =
+            case mapping
+            when Proc
+              mapping.arity.zero? ? mapping.call : mapping.call(current_version)
+            when Hash
+              map_version(mapping, current_version)
+            else
+              mapping
+            end
+
+          options.merge(version: mapped_version)
+        end
+
+        def map_version(mapping, current_version)
+          return current_version if current_version.nil?
+
+          target = Version.cast(current_version)
+          mapped = mapping.find { |version, _| Version.cast(version) == target }
+          mapped ? mapped.last : current_version
         end
       end
     end

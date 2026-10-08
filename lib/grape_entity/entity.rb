@@ -41,6 +41,8 @@ module Grape
   #     end
   #   end
   class Entity
+    extend VersionValidations
+
     attr_reader :object, :delegator, :options
 
     # The Entity DSL allows you to mix entity functionality into
@@ -133,6 +135,26 @@ module Grape
       def [](val)
         val
       end
+
+      private
+
+      def validate_multi_attribute_options!(args, options, block_given)
+        return unless args.size > 1
+
+        raise ArgumentError, 'You may not use the :as option on multi-attribute exposures.' if options[:as]
+        if options.key?(:expose_nil)
+          raise ArgumentError, 'You may not use the :expose_nil on multi-attribute exposures.'
+        end
+        return unless block_given
+
+        raise ArgumentError, 'You may not use block-setting on multi-attribute exposures.'
+      end
+
+      def configure_block_options(options)
+        return unless options[:format_with].respond_to?(:call)
+
+        raise ArgumentError, 'You may not use block-setting when also using format_with'
+      end
     end
 
     @formatters = {}
@@ -190,50 +212,17 @@ module Grape
     #   field, typically the value is a hash with two fields, type and desc.
     # @option options :merge This option allows you to merge an exposed field to the root
     #
-    # rubocop:disable Layout/LineLength
     def self.expose(*args, &block)
       options = merge_options(args.last.is_a?(Hash) ? args.pop : {})
+      validate_multi_attribute_options!(args, options, block_given?)
 
-      if args.size > 1
+      configure_block_options(options) if block_given?
+      options[block.parameters.any? ? :proc : :nesting] = block if block_given?
 
-        raise ArgumentError, 'You may not use the :as option on multi-attribute exposures.' if options[:as]
-        raise ArgumentError, 'You may not use the :expose_nil on multi-attribute exposures.' if options.key?(:expose_nil)
-        raise ArgumentError, 'You may not use block-setting on multi-attribute exposures.' if block_given?
-      end
-
-      if block_given?
-        if options[:format_with].respond_to?(:call)
-          raise ArgumentError, 'You may not use block-setting when also using format_with'
-        end
-
-        if block.parameters.any?
-          options[:proc] = block
-        else
-          options[:nesting] = true
-        end
-      end
-
-      @documentation = nil
+      reset_documentation!
       @nesting_stack ||= []
       args.each { |attribute| build_exposure_for_attribute(attribute, @nesting_stack, options, block) }
-    end
-    # rubocop:enable Layout/LineLength
-
-    def self.build_exposure_for_attribute(attribute, nesting_stack, options, block)
-      exposure_list = nesting_stack.empty? ? root_exposures : nesting_stack.last.nested_exposures
-
-      exposure = Exposure.new(attribute, options)
-
-      exposure_list.delete_by(attribute) if exposure.override?
-
-      exposure_list << exposure
-
-      # Nested exposures are given in a block with no parameters.
-      return unless exposure.nesting?
-
-      nesting_stack << exposure
-      block.call
-      nesting_stack.pop
+      validate_version_exposures!
     end
 
     # Returns exposures that have been declared for this Entity on the top level.
@@ -248,13 +237,13 @@ module Grape
 
     def self.unexpose(*attributes)
       cannot_unexpose! unless can_unexpose?
-      @documentation = nil
+      reset_documentation!
       root_exposures.delete_by(*attributes)
     end
 
     def self.unexpose_all
       cannot_unexpose! unless can_unexpose?
-      @documentation = nil
+      reset_documentation!
       root_exposures.clear
     end
 
@@ -284,12 +273,6 @@ module Grape
     # Returns a hash, the keys are symbolized references to fields in the entity,
     # the values are document keys in the entity's documentation key. When calling
     # #docmentation, any exposure without a documentation key will be ignored.
-    def self.documentation
-      @documentation ||= root_exposures.each_with_object({}) do |exposure, memo|
-        memo[exposure.key] = exposure.documentation if exposure.documentation && !exposure.documentation.empty?
-      end
-    end
-
     # This allows you to declare a Proc in which exposures can be formatted with.
     # It takes a block with a single argument which is passed as the value of the exposed attribute.
     #
@@ -500,7 +483,7 @@ module Grape
     end
 
     def documentation
-      self.class.documentation
+      self.class.documentation(options[:version])
     end
 
     def formatters
@@ -646,6 +629,10 @@ module Grape
       expose_nil
       override
       default
+      since
+      until
+      version
+      version_mapping
     ].to_set.freeze
 
     # Merges the given options with current block options.
