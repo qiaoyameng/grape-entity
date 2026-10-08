@@ -120,6 +120,20 @@ module Grape
           @key.respond_to?(:call) ? entity.exec_with_object(@options, &@key) : @key
         end
 
+        # The output key when it can be known without evaluating the
+        # represented object. Returns nil for proc/lambda aliases.
+        def static_key
+          @key unless @key.respond_to?(:call)
+        end
+
+        def dynamic_key?
+          @key.respond_to?(:call)
+        end
+
+        def omit_nil?
+          @options[:expose_nil] == false
+        end
+
         def with_attr_path(entity, options, &block)
           path_part = attr_path(entity, options)
           options.with_attr_path(path_part, &block)

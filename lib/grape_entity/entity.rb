@@ -137,6 +137,8 @@ module Grape
 
     @formatters = {}
 
+    extend JsonSchema::Export
+
     def self.inherited(subclass)
       subclass.root_exposure = root_exposure.dup
       subclass.formatters = formatters.dup

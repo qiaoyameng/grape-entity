@@ -26,6 +26,7 @@
       - [Expose Nil](#expose-nil)
       - [Default Value](#default-value)
       - [Documentation](#documentation)
+      - [JSON Schema Export](#json-schema-export)
     - [Options Hash](#options-hash)
       - [Passing Additional Option To Nested Exposure](#passing-additional-option-to-nested-exposure)
       - [Attribute Path Tracking](#attribute-path-tracking)
@@ -517,6 +518,70 @@ Expose documentation with the field. Gets bubbled up when used with Grape and va
 
 ```ruby
 expose :text, documentation: { type: "String", desc: "Status update text." }
+```
+
+#### JSON Schema Export
+
+While `.documentation` only returns the raw field descriptions, `.json_schema`
+exports a [JSON Schema](https://json-schema.org) (draft 2020-12) that
+describes the entity's serialized output. It reuses every statically declared
+exposure detail — documentation `type`, `required`, `nullable`, `using:`
+nested entities and collection declarations — and names `properties` after the
+output alias (`as:`).
+
+```ruby
+class UserEntity < Grape::Entity
+  root 'users', 'user'
+
+  expose :id, documentation: { type: 'Integer', required: true }
+  expose :name, as: :full_name, documentation: { type: 'String' }
+  expose :email, if: { type: :full }, documentation: { type: 'String' }
+  expose :friends, using: UserEntity, documentation: { is_collection: true }
+end
+
+UserEntity.json_schema
+# {
+#   "$schema": "https://json-schema.org/draft/2020-12/schema",
+#   "$defs": { "UserEntity": { "type": "object",
+#     "properties": { "id": {"type":"integer"}, "full_name": {"type":"string"},
+#       "email": {"type":"string", "x-grape-entity-note": "field presence is conditional (...); marked optional"},
+#       "friends": {"type": ["array","null"], "items": {"oneOf": [{"$ref":"#/$defs/UserEntity"}, {"type":"null"}]}} },
+#     "required": ["id"], "additionalProperties": false } },
+#   "type": "object",
+#   "properties": { "user" => { "$ref" => "#/$defs/UserEntity" } },
+#   "required": ["user"], "additionalProperties": false,
+#   "x-grape-entity": { ..., "warnings": [] }
+# }
+```
+
+Recursive entities are emitted once under `$defs` and linked with `$ref`.
+Object getters and conditional Procs are never executed, so conditionally
+exposed fields (`if:`/`unless:`/symbols/Procs and `expose_nil: false`) are
+always marked optional with an `x-grape-entity-note` explaining why.
+
+Shapes that cannot be known statically are never assigned a misleading type:
+
+* `merge: true` fields flatten a declared `using:` entity's properties into
+  the parent; merged block/formatter values need an explicit
+  `documentation: { schema: ... }` or are reported in `x-grape-entity` warnings.
+* Dynamic keys (`as:` a Proc) set `additionalProperties: true`; supply an
+  explicit `schema:` to describe the dynamic values.
+* Custom formatters that change the type need a declared documentation
+  `type:` or an explicit `schema:`; otherwise the field is untyped and warned.
+
+Options:
+
+* `collection: true` — describe the output of representing a collection.
+* `only:` / `except:` — apply the same projection accepted by `represent`,
+  including nested hashes such as `only: [:id, { friends: [:id] }]`.
+* `root:` — `:auto` (default) follows the `root` declaration, a
+  String/Symbol wraps in that key, `false`/`nil` omits the wrapper.
+* `present_collection:` — overrides the entity-level `.present_collection`
+  flag; the configured collection accessor is described as an array.
+* `id:` / `title:` — optional JSON Schema `$id` and `title`.
+
+```ruby
+UserEntity.json_schema(collection: true, only: [:id, :full_name])
 ```
 
 ### Options Hash
